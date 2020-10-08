@@ -23,8 +23,9 @@ contract Admin {
 }
 
 contract RiitRating is Admin {
-    uint constant private maxSpecNumber = 8;
-    uint constant private maxAvailableMark = 100;
+    uint constant private maxSpecNumber = 8; //Max Available number characteristics
+    uint constant private maxAvailableMark = 100; //Max mark
+    uint constant private yearLength = 31622400; //Lenght for year
     
     constructor( ) public {
         specArrayLength = 0;
@@ -40,15 +41,15 @@ contract RiitRating is Admin {
     struct Spec {
         uint id; // id of Decription
         string name; // name ofr Description
-        int power;   // voting power of Decriptions
+        uint power;   // voting power of Decriptions
     }
    
     Spec[maxSpecNumber] public specification;
     uint specArrayLength;
    
-    event AddNewSpec(address creator, uint id, string name, int power);
+    event AddNewSpec(address creator, uint id, string name, uint power);
    
-    function addSpec(string memory name,  int power ) onlyAdmin public returns( uint id ){
+    function addSpec(string memory name,  uint power ) onlyAdmin public returns( uint id ){
         require(specArrayLength < maxSpecNumber );
         id = specArrayLength + 1;
         specification[specArrayLength] = Spec({id: id, name: name, power: power});
@@ -57,7 +58,7 @@ contract RiitRating is Admin {
     }
    
 
-    function updatePowerById(uint id, int newPower) onlyAdmin public {
+    function updatePowerById(uint id, uint newPower) onlyAdmin public {
         require(id <= specArrayLength );
         specification[id - 1].power = newPower;
     }
@@ -240,10 +241,12 @@ contract RiitRating is Admin {
    
     Review[] public reviews;
     uint reviewArrayLength;
-    mapping( uint => uint[]) reviewMarks;
-    mapping(address => uint) public reviewByAuthor;
-    mapping(address => uint) public userReviews;
-   
+    
+    mapping(uint => uint[]) reviewMarks;    // marks for review
+    mapping(uint => uint[]) reviewByAuthor;   // reviews submitted by author
+    mapping(uint => uint[]) userReviews;      // customer reviews 
+    mapping(uint => uint) startCalculationReviewIndex;
+    
     function addReview( uint orderId, uint[] memory userMarks ) public returns(uint id){
         require(orderId <= orderArrayLength, "Order not not exists.");
         require(userMarks.length <= specArrayLength, "Marks array length should be equal specs lenght.");
@@ -256,11 +259,15 @@ contract RiitRating is Admin {
             "You do not have access to this function. Must be customer or executors of this order."
         );
        
-        address user;
+        uint author;
+        uint user;
+        
         if(agents[order.executorId - 1].adr == msg.sender  ){
-            user = agents[order.executorId - 1].adr;
+            author = agents[order.customerId - 1].id;
+            user = agents[order.executorId - 1].id;
         }else{
-            user = agents[order.customerId - 1].adr;
+            author = agents[order.executorId - 1].id;
+            user = agents[order.customerId - 1].id;
         }
         
         id = reviewArrayLength + 1;
@@ -270,13 +277,59 @@ contract RiitRating is Admin {
            reviewMarks[reviewArrayLength].push(userMarks[i]);
         }
        
-        reviewByAuthor[msg.sender] = id;
-        userReviews[user] = id;
+        reviewByAuthor[author].push(id);
+        userReviews[user].push(id);
         reviewArrayLength++;
     }
+    
     /*
     End Review part of contracts - responsible for Review RiitRating
     */
+    
+    /*
+    Begin Function for get ranking of customerId
+    */
+    function getAverageScore( uint agentId ) public returns( uint ){
+        uint startIndex = startCalculationReviewIndex[agentId];
+        uint eventsCount = 0;
+        uint[] memory summary = new uint[](specArrayLength);
+        
+        for( uint i = startIndex; i < userReviews[agentId].length; i++){
+            uint idx = userReviews[agentId][i];
+            if(reviews[idx].created  + yearLength < now){
+                startIndex++;
+            }else{
+                for(uint iSpecs = 0; iSpecs < specArrayLength; iSpecs++){
+                    if(reviewMarks[idx][iSpecs] <= maxAvailableMark){
+                        summary[iSpecs] = summary[iSpecs] + reviewMarks[idx][iSpecs];
+                    }else{
+                        summary[iSpecs] = summary[iSpecs] + maxAvailableMark;
+                    }
+                }
+                eventsCount++;
+            }
+        }
+        
+        startCalculationReviewIndex[agentId] = startIndex;
+        
+        if(eventsCount == 0){
+            return maxAvailableMark;
+        }
+        
+        uint rank = 0;
+        uint weigth = 0;
+        for( uint iSpecs = 0; iSpecs < specArrayLength; iSpecs++ ){
+            rank = rank + summary[iSpecs] * specification[iSpecs].power / eventsCount;
+            weigth = weigth + specification[iSpecs].power;
+        }
+        
+        return rank / weigth;
+    }   
+    /*
+    End Review part of contracts - responsible for Review RiitRating
+    */
+    
+    
    
 }
 	
