@@ -444,11 +444,11 @@ contract RiitRating is Admin {
     Begin Review part of contracts - responsible for Review RiitRating
     */
     struct userMark{
-       uint16 currentYear;
        uint8 averageRate;
        uint8 averageWeightRate;
        
-       uint8[maxSpecNumber][12] eventsNumber;
+       uint16[12] currentYear;
+       uint16[maxSpecNumber][12] eventsNumber;
        uint8[maxSpecNumber][12] averageMarks;
        uint8[maxSpecNumber][12] averageWeightMarks;
     }
@@ -479,21 +479,22 @@ contract RiitRating is Admin {
             userId = agents[order.customerId - 1].id;
         }
         
-        uint8 authorWeightedRate = (marks[authorId].currentYear == 0? maxAvailableMark : marks[authorId].averageWeightRate);
+        uint8 authorWeightedRate = (marks[authorId].averageRate == 0? maxAvailableMark : marks[authorId].averageWeightRate); // check that object already exists
             
         
         uint16 year = getYear(now);
         uint8 month = getMonth(now);
         
-        if(marks[userId].currentYear == 0 ){
+        if(marks[userId].averageRate == 0 ){ // first review for user
             userMark memory newMark;
-            newMark.currentYear = year;
+            
+            newMark.currentYear[month] = year;
             for( uint i = 0; i <= specArrayLength; i++){
                 if(newMarks[i] < minAvailableMark){
                     continue; // 0 means no mark setup for review
                 }
+                newMark.eventsNumber[month][i] = 1;
                 if(newMarks[i] > maxAvailableMark){
-                    newMark.eventsNumber[month][i] = 1;
                     newMark.averageMarks[month][i] = maxAvailableMark;
                     newMark.averageWeightMarks[month][i] = maxAvailableMark;
                 }else{
