@@ -329,13 +329,15 @@ contract RiitRating is Admin {
     Begin Order part of contracts - responsible for Orders RiitRating
     */
    
+    enum OrderState { Created, Confirmed, Reviewed }
+    
     struct Order{
         uint id; // id of Orders
         string info;
         uint customerId; // id of custormer
         uint executorId; // id of executor
-        uint customerConfirmationDate;
-        uint executorConfirmationDate;
+        OrderState customerState;
+        OrderState executorState;
     }
    
     Order[] public orders;
@@ -343,63 +345,34 @@ contract RiitRating is Admin {
     mapping(uint => uint[]) public agentOrders;
     mapping(uint => uint[]) public agentUnconfirmedOrders;
    
-    event AddNewOrder(address creator, uint id, string info, uint customerId, uint executorId);
+    event AddNewOrder(address creator, uint id, string info, OrderState customerState, OrderState executorState);
    
-    function addOrder(string memory info, uint customerId, uint executorId, bool isCustomerConfirmed, bool isExecutorConfirmed ) public returns(uint id){
+    function addOrder(string memory info, uint customerId, uint executorId, OrderState customerState, OrderState executorState ) public returns(uint id){
         require( customerId > 0 && customerId <= agentArrayLength, "Customer with such id is not exists");
         require( executorId > 0 && executorId <= agentArrayLength, "Executeor with such d is not exists");
         require(agents[customerId - 1].isCustomer == true, "Agent not exists or not Customer.");
         require(agents[executorId -1].isExecutor == true, "Agent not exists or not Executor.");
         require(customerId != executorId, "Customer not allowed to be Executor of the same order.");
-       
-        uint customerDate = isCustomerConfirmed == true? now : 0;
-        uint executorDate = isExecutorConfirmed == true? now : 0;
+        require((customerState == OrderState.Created || customerState == OrderState.Confirmed)
+            &&
+        (executorState == OrderState.Created || executorState == OrderState.Confirmed));
+        
         id = orderArrayLength + 1;
-        orders.push(Order({id: id, info: info, customerId: customerId, executorId: executorId, customerConfirmationDate: customerDate, executorConfirmationDate: executorDate }));
+        orders.push(Order({id: id, info: info, customerId: customerId, executorId: executorId, customerState: customerState, executorState: executorState }));
         orderArrayLength++;
        
         agentOrders[customerId].push(id);
        
         agentOrders[executorId].push(id);
        
-        if( isCustomerConfirmed == false || isExecutorConfirmed == false){
+        if( customerState != OrderState.Confirmed || executorState != OrderState.Confirmed){
             agentUnconfirmedOrders[customerId].push(id);
             agentUnconfirmedOrders[executorId].push(id);
         }
        
-        emit AddNewOrder(msg.sender, id, info, customerId, executorId);
+        emit AddNewOrder(msg.sender, id, info, customerState, executorState);
     }
-   
-    function ConfirmOrderByCustomer( uint id ) private {
-        Order storage order = orders[id - 1];
-        if( order.customerConfirmationDate > 0 ) {
-            revert("Order already confirmed by customer.");
-        }
-        if( msg.sender != agents[order.customerId -1].adr){
-            revert("Only customer can confirm.");
-        }
-        order.customerConfirmationDate = now;
-       
-        if(order.executorConfirmationDate > 0){
-            changeOrderStatus(order);
-        }
-    }
-   
-    function ConfirmOrderByExecutor( uint id ) private {
-        Order storage order = orders[id - 1];
-        if( order.executorConfirmationDate > 0 ) {
-            revert("Order already confirmed by executor.");
-        }
-        if( msg.sender != agents[order.executorId - 1].adr){
-            revert("Only executor can confirm.");
-        }
-        order.executorConfirmationDate = now;
-       
-         if(order.customerConfirmationDate > 0){
-            changeOrderStatus(order);
-        }
-    }
-   
+    
     function changeOrderStatus( Order memory order ) private {
         for( uint i = 0; i < agentUnconfirmedOrders[order.customerId].length; i++){
             if( agentUnconfirmedOrders[order.customerId][i] == order.id){
@@ -423,6 +396,38 @@ contract RiitRating is Admin {
        
     }
    
+   
+    function ConfirmOrderByCustomer( uint id ) private {
+        Order storage order = orders[id - 1];
+        if( order.customerState ==  OrderState.Confirmed || order.customerState == OrderState.Reviewed ) {
+            revert("Order already confirmed by customer.");
+        }
+        if( msg.sender != agents[order.customerId -1].adr){
+            revert("Only customer can confirm.");
+        }
+        order.customerState = OrderState.Confirmed;
+       
+        if(order.executorState == OrderState.Confirmed ){
+            changeOrderStatus(order);
+        }
+    }
+   
+    function ConfirmOrderByExecutor( uint id ) private {
+        Order storage order = orders[id - 1];
+        if( order.executorState ==  OrderState.Confirmed || order.executorState == OrderState.Reviewed ) {
+            revert("Order already confirmed by executor.");
+        }
+        if( msg.sender != agents[order.executorId - 1].adr){
+            revert("Only executor can confirm.");
+        }
+        order.executorState = OrderState.Confirmed;
+       
+         if(order.customerState == OrderState.Confirmed){
+            changeOrderStatus(order);
+        }
+    }
+   
+   
     function getUnconfirmedOrders(uint agentId) public view returns(uint[] memory, string[] memory){
         require( msg.sender == agents[agentId - 1].adr, "Identity of user is not confirmed." );
        
@@ -444,13 +449,11 @@ contract RiitRating is Admin {
     Begin Review part of contracts - responsible for Review RiitRating
     */
     struct userMark{
-       uint8 averageRate;
-       uint8 averageWeightRate;
-       
-       uint16[12] currentYear;
-       uint16[maxSpecNumber][12] eventsNumber;
-       uint8[maxSpecNumber][12] averageMarks;
-       uint8[maxSpecNumber][12] averageWeightMarks;
+        bool isValue;
+        uint16[12] currentYear;
+        uint16[maxSpecNumber][12] eventsNumber;
+        uint16[maxSpecNumber][12] averageMarks;
+        uint16[maxSpecNumber][12] averageWeightMarks;
     }
     
     mapping(uint => userMark) public marks; // agentId to Mark;
@@ -469,25 +472,32 @@ contract RiitRating is Admin {
        
         uint authorId;
         uint userId;
-         
         
         if(agents[order.executorId - 1].adr == msg.sender  ){
+            require(order.customerState == OrderState.Confirmed);
+            order.customerState = OrderState.Reviewed;
             authorId = agents[order.customerId - 1].id;
             userId = agents[order.executorId - 1].id;
         }else{
+            require(order.executorState == OrderState.Confirmed);
+            order.executorState = OrderState.Reviewed;
             authorId = agents[order.executorId - 1].id;
             userId = agents[order.customerId - 1].id;
         }
         
-        uint8 authorWeightedRate = (marks[authorId].averageRate == 0? maxAvailableMark : marks[authorId].averageWeightRate); // check that object already exists
-            
+        uint8 authorWeightedRate = 1; // check that object already exists
         
         uint16 year = getYear(now);
         uint8 month = getMonth(now);
-        
-        if(marks[userId].averageRate == 0 ){ // first review for user
-            userMark memory newMark;
+        userMark memory newMark;
             
+        if(marks[userId].isValue ==  true){ // user record already existes in system
+            newMark = marks[userId];
+        }else{
+            newMark.isValue = true;
+        } 
+        
+        if(marks[userId].currentYear[month] != year ){ // srart review for new Yaar
             newMark.currentYear[month] = year;
             for( uint i = 0; i <= specArrayLength; i++){
                 if(newMarks[i] < minAvailableMark){
@@ -498,13 +508,35 @@ contract RiitRating is Admin {
                     newMark.averageMarks[month][i] = maxAvailableMark;
                     newMark.averageWeightMarks[month][i] = maxAvailableMark;
                 }else{
-                    newMark.eventsNumber[month][i] = 1;
                     newMark.averageMarks[month][i] = newMarks[i];
                     newMark.averageWeightMarks[month][i] = maxAvailableMark - ( (maxAvailableMark - newMarks[i]) * authorWeightedRate / maxAvailableMark );
                 }
             } 
-            marks[userId] = newMark;
+        }else{
+            for( uint i = 0; i <= specArrayLength; i++){
+                if(newMarks[i] < minAvailableMark){
+                    continue; // 0 means no mark setup for review
+                }
+                if(newMarks[i] > maxAvailableMark){
+                   newMark.averageMarks[month][i] = (newMark.averageMarks[month][i] * newMark.eventsNumber[month][i] + maxAvailableMark) / (newMark.eventsNumber[month][i] + 1);
+                   newMark.averageWeightMarks[month][i] = (newMark.averageWeightMarks[month][i] * newMark.eventsNumber[month][i] + maxAvailableMark) / (newMark.eventsNumber[month][i] + 1);
+                }else{
+                    newMark.averageMarks[month][i] = (newMark.averageMarks[month][i] * newMark.eventsNumber[month][i] + newMarks[i]) / (newMark.eventsNumber[month][i] + 1);
+                    newMark.averageWeightMarks[month][i] = (newMark.averageWeightMarks[month][i] * newMark.eventsNumber[month][i] +
+                        maxAvailableMark - ( (maxAvailableMark - newMarks[i]) * authorWeightedRate / maxAvailableMark ) ) /
+                    (newMark.eventsNumber[month][i] + 1);
+                }
+                newMark.eventsNumber[month][i]++;
+            }   
         }
+        
+        /*
+        uint averageMark = 0;
+        uint averageWeighterMark = 0;
+        uint rankDiveider = 0;
+        */
+        marks[userId] = newMark;
+        
         emit AddNewReview(authorId, userId, orderId);
     }
     
