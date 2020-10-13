@@ -242,7 +242,7 @@ contract RiitRating is Admin {
     End DateTime Parts od contract
     */
     uint constant private maxSpecNumber = 8; //Max Available number characteristics
-   uint8 constant private minAvailableMark = 1; //Max mark
+    uint8 constant private minAvailableMark = 1; //Max mark
     uint8 constant private maxAvailableMark = 100; //Max mark
     
     constructor( ) public {
@@ -258,15 +258,15 @@ contract RiitRating is Admin {
     struct Spec {
         uint id; // id of Decription
         string name; // name ofr Description
-        uint power;   // voting power of Decriptions
+        uint16 power;   // voting power of Decriptions
     }
    
     Spec[maxSpecNumber] public specification;
     uint specArrayLength;
    
-    event AddNewSpec(address creator, uint id, string name, uint power);
+    event AddNewSpec(address creator, uint id, string name, uint16 power);
    
-    function addSpec(string memory name,  uint power ) onlyAdmin public returns( uint id ){
+    function addSpec(string memory name,  uint16 power ) onlyAdmin public returns( uint id ){
         require(specArrayLength < maxSpecNumber );
         id = specArrayLength + 1;
         specification[specArrayLength] = Spec({id: id, name: name, power: power});
@@ -275,7 +275,7 @@ contract RiitRating is Admin {
     }
    
 
-    function updatePowerById(uint id, uint newPower) onlyAdmin public {
+    function updatePowerById(uint id, uint16 newPower) onlyAdmin public {
         require(id <= specArrayLength );
         specification[id - 1].power = newPower;
     }
@@ -485,7 +485,7 @@ contract RiitRating is Admin {
             userId = agents[order.customerId - 1].id;
         }
         
-        uint8 authorWeightedRate = 1; // check that object already exists
+        uint16 authorWeightedRate = getWeightAverageById(authorId); // check that object already exists
         
         uint16 year = getYear(now);
         uint8 month = getMonth(now);
@@ -538,6 +538,46 @@ contract RiitRating is Admin {
         marks[userId] = newMark;
         
         emit AddNewReview(authorId, userId, orderId);
+    }
+    
+    function getAverageById(uint userId) public view returns( uint16 ){
+        require(userId <= agentArrayLength, "User not exists.");
+        if(marks[userId].isValue == false){
+            return maxAvailableMark;
+        }
+        userMark memory currentMark = marks[userId];
+        uint16 totalMark = 0;
+        uint16 totalPower = 0;
+        
+        for( uint i = 0; i < specArrayLength; i++){
+            uint totalSpec = 0;
+            for( uint j = 0; j < 12; j++){
+                totalSpec = totalSpec + currentMark.averageMarks[j][i];
+            }
+            totalMark = totalMark + (uint16)(totalSpec * specification[i].power);
+            totalPower = totalPower + specification[i].power;
+        }
+        return totalMark / totalPower;
+    }
+    
+    function getWeightAverageById(uint userId) public view returns( uint16 ){
+        require(userId <= agentArrayLength, "User not exists.");
+        if(marks[userId].isValue == false){
+            return maxAvailableMark;
+        }
+        userMark memory currentMark = marks[userId];
+        uint16 totalMark = 0;
+        uint16 totalPower = 0;
+        
+        for( uint i = 0; i < specArrayLength; i++){
+            uint totalSpec = 0;
+            for( uint j = 0; j < 12; j++){
+                totalSpec = totalSpec + currentMark.averageWeightMarks[j][i];
+            }
+            totalMark = totalMark + (uint16)(totalSpec * specification[i].power);
+            totalPower = totalPower + specification[i].power;
+        }
+        return totalMark / totalPower;
     }
     
     /*
