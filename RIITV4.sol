@@ -241,7 +241,7 @@ contract RiitRating is Admin {
     /*
     End DateTime Parts od contract
     */
-    uint constant private maxSpecNumber = 8; //Max Available number characteristics
+    uint constant private maxSpecNumber = 3; //Max Available number characteristics
     uint8 constant private minAvailableMark = 1; //Max mark
     uint8 constant private maxAvailableMark = 100; //Max mark
     
@@ -345,32 +345,37 @@ contract RiitRating is Admin {
     mapping(uint => uint[]) public agentOrders;
     mapping(uint => uint[]) public agentUnconfirmedOrders;
    
-    event AddNewOrder(address creator, uint id, string info, OrderState customerState, OrderState executorState);
+    event AddNewOrder(address creator, uint id, string info /*, OrderState customerState, OrderState executorState */);
    
-    function addOrder(string memory info, uint customerId, uint executorId, OrderState customerState, OrderState executorState ) public returns(uint id){
+    function addOrder(string memory info, uint customerId, uint executorId /*, OrderState customerState, OrderState executorState */ ) public returns(uint id){
         require( customerId > 0 && customerId <= agentArrayLength, "Customer with such id is not exists");
         require( executorId > 0 && executorId <= agentArrayLength, "Executeor with such d is not exists");
         require(agents[customerId - 1].isCustomer == true, "Agent not exists or not Customer.");
         require(agents[executorId -1].isExecutor == true, "Agent not exists or not Executor.");
         require(customerId != executorId, "Customer not allowed to be Executor of the same order.");
+        /*
         require((customerState == OrderState.Created || customerState == OrderState.Confirmed)
             &&
         (executorState == OrderState.Created || executorState == OrderState.Confirmed));
+        */
         
         id = orderArrayLength + 1;
+        /*
         orders.push(Order({id: id, info: info, customerId: customerId, executorId: executorId, customerState: customerState, executorState: executorState }));
+        */
+        orders.push(Order({id: id, info: info, customerId: customerId, executorId: executorId, customerState: OrderState.Created, executorState: OrderState.Created }));
         orderArrayLength++;
        
         agentOrders[customerId].push(id);
        
         agentOrders[executorId].push(id);
        
-        if( customerState != OrderState.Confirmed || executorState != OrderState.Confirmed){
+        /* if( customerState != OrderState.Confirmed || executorState != OrderState.Confirmed){ */
             agentUnconfirmedOrders[customerId].push(id);
             agentUnconfirmedOrders[executorId].push(id);
-        }
+        /* } */
        
-        emit AddNewOrder(msg.sender, id, info, customerState, executorState);
+        emit AddNewOrder(msg.sender, id, info/* , customerState, executorState */);
     }
     
     function changeOrderStatus( Order memory order ) private {
@@ -397,7 +402,7 @@ contract RiitRating is Admin {
     }
    
    
-    function ConfirmOrderByCustomer( uint id ) private {
+    function ConfirmOrderByCustomer( uint id ) public {
         Order storage order = orders[id - 1];
         if( order.customerState ==  OrderState.Confirmed || order.customerState == OrderState.Reviewed ) {
             revert("Order already confirmed by customer.");
@@ -412,7 +417,7 @@ contract RiitRating is Admin {
         }
     }
    
-    function ConfirmOrderByExecutor( uint id ) private {
+    function ConfirmOrderByExecutor( uint id ) public {
         Order storage order = orders[id - 1];
         if( order.executorState ==  OrderState.Confirmed || order.executorState == OrderState.Reviewed ) {
             revert("Order already confirmed by executor.");
@@ -435,8 +440,8 @@ contract RiitRating is Admin {
         string[] memory infos = new string[](agentUnconfirmedOrders[agentId].length) ;
 
         for (uint i = 0; i < agentUnconfirmedOrders[agentId].length; i++) {
-            ids[i] = orders[agentUnconfirmedOrders[agentId][i]].id;
-            infos[i] = orders[agentUnconfirmedOrders[agentId][i]].info;
+            ids[i] = orders[agentUnconfirmedOrders[agentId][i] - 1].id;
+            infos[i] = orders[agentUnconfirmedOrders[agentId][i] - 1].info;
         }
         return (ids, infos);
     }
@@ -459,7 +464,7 @@ contract RiitRating is Admin {
     mapping(uint => userMark) public marks; // agentId to Mark;
     event AddNewReview(uint indexed authorId, uint indexed userId, uint orderId);
     
-    function addReview(uint orderId, uint8[maxSpecNumber] memory newMarks) public {
+    function addReview(uint orderId, uint16[maxSpecNumber] memory newMarks) public {
         require(orderId <= orderArrayLength, "Order not not exists.");
         
         Order memory order = orders[orderId - 1];
