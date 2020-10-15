@@ -464,43 +464,51 @@ contract RiitRating is Admin {
     mapping(uint => userMark) public marks; // agentId to Mark;
     event AddNewReview(uint indexed authorId, uint indexed userId, uint orderId);
     
-    function addReview(uint orderId, uint16[maxSpecNumber] memory newMarks) public {
+    function addReview(uint orderId, uint reviewTime, uint8[maxSpecNumber] memory newMarks) public {
         require(orderId <= orderArrayLength, "Order not not exists.");
         
-        Order memory order = orders[orderId - 1];
+        uint orderCustomerId = orders[orderId - 1].customerId;
+        uint orderExecutorId = orders[orderId - 1].executorId;
+        
         require(
-            agents[order.executorId - 1].adr == msg.sender
+            agents[orderCustomerId - 1].adr == msg.sender
             ||
-            agents[order.customerId - 1].adr == msg.sender,
+            agents[orderExecutorId - 1].adr == msg.sender,
             "You do not have access to this function. Must be customer or executors of this order."
         );
        
         uint authorId;
         uint userId;
         
-        if(agents[order.executorId - 1].adr == msg.sender  ){
-            require(order.customerState == OrderState.Confirmed);
-            order.customerState = OrderState.Reviewed;
-            authorId = agents[order.customerId - 1].id;
-            userId = agents[order.executorId - 1].id;
+        if(agents[orderExecutorId - 1].adr == msg.sender  ){
+            require(orders[orderId - 1].executorState == OrderState.Confirmed);
+            orders[orderId - 1].executorState = OrderState.Reviewed;
+            authorId = agents[orderExecutorId - 1].id;
+            userId = agents[orderExecutorId - 1].id;
         }else{
-            require(order.executorState == OrderState.Confirmed);
-            order.executorState = OrderState.Reviewed;
-            authorId = agents[order.executorId - 1].id;
-            userId = agents[order.customerId - 1].id;
+            require( orders[orderId - 1].customerState == OrderState.Confirmed);
+            orders[orderId - 1].customerState = OrderState.Reviewed;
+            authorId = agents[orderExecutorId - 1].id;
+            userId = agents[orderExecutorId - 1].id;
         }
         
-        uint16 authorWeightedRate = getWeightAverageById(authorId); // check that object already exists
+        uint16 authorWeightedRate = minAvailableMark; //getWeightAverageById(authorId); // check that object already exists
         
-        uint16 year = getYear(now);
-        uint8 month = getMonth(now);
-        userMark memory newMark;
+        uint16 year = getYear(reviewTime);
+        uint8 month = getMonth(reviewTime);
+        
+        
+        if(marks[userId].isValue !=  true){ // user record already existes in system
+            uint16[12] memory currentYear;
+            uint16[maxSpecNumber][12] memory eventsNumber;
+            uint16[maxSpecNumber][12] memory averageMarks;
+            uint16[maxSpecNumber][12] memory averageWeightMarks;
+            userMark memory newMark = userMark(true, currentYear, eventsNumber, averageMarks, averageWeightMarks);
             
-        if(marks[userId].isValue ==  true){ // user record already existes in system
-            newMark = marks[userId];
-        }else{
-            newMark.isValue = true;
+            marks[userId] = newMark;
         } 
+        
+        /*
         
         if(marks[userId].currentYear[month] != year ){ // srart review for new Yaar
             newMark.currentYear[month] = year;
@@ -534,14 +542,7 @@ contract RiitRating is Admin {
                 newMark.eventsNumber[month][i]++;
             }   
         }
-        
-        /*
-        uint averageMark = 0;
-        uint averageWeighterMark = 0;
-        uint rankDiveider = 0;
         */
-        marks[userId] = newMark;
-        
         emit AddNewReview(authorId, userId, orderId);
     }
     
