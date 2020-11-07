@@ -35,17 +35,21 @@ contract RiitRating is Admin {
     }
     
     /*
-    Two common functions - do not belong any parts of contract
+    Common functions - do not belong any parts of contract
     */
 
-/*
-    uncomment it inside parity UI
-    function() payable { }
+    receive() external payable {
+       if( msg.value != 0 ){
+            revert( "Don't send ether to this contract." );
+        }
+    }
+    
+    fallback() external payable { 
         if( msg.value != 0 ){
             revert( "Don't send ether to this contract." );
         }
     }
-*/   
+   
     function stringToBytes32(string memory source) public pure returns (bytes32 result) {
         bytes memory tempEmptyStringTest = bytes(source);
         if (tempEmptyStringTest.length == 0) {
@@ -56,6 +60,11 @@ contract RiitRating is Admin {
             result := mload(add(source, 32))
         }
     }
+    
+    /*
+    End Common functions - do not belong any parts of contract
+    */
+
     
     /*
     Begin Specification part of contracts - responsible for Specification for RiitRating
