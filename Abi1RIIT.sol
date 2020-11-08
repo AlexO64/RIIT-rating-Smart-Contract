@@ -66,6 +66,7 @@ contract RiitRating is Admin {
     */
 
     
+    
     /*
     Begin Specification part of contracts - responsible for Specification for RiitRating
     */
